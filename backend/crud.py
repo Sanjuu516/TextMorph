@@ -1,9 +1,9 @@
-# backend/crud.py
 import secrets
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from . import models, schemas
 
+# Setup the password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def verify_password(plain_password, hashed_password):
@@ -28,16 +28,16 @@ def create_user(db: Session, user: schemas.UserCreate):
     db.refresh(db_user)
     return db_user
 
-# --- NEW FUNCTION TO UPDATE USER PROFILE ---
-def update_user_profile(db: Session, email: str, user_update: schemas.UserUpdate):
-    db_user = get_user_by_email(db, email=email)
-    if db_user:
-        update_data = user_update.model_dump(exclude_unset=True)
+def update_user_profile(db: Session, email: str, profile_data: schemas.ProfileUpdate):
+    user = get_user_by_email(db, email=email)
+    if user:
+        # Update only the fields that were provided
+        update_data = profile_data.model_dump(exclude_unset=True)
         for key, value in update_data.items():
-            setattr(db_user, key, value)
+            setattr(user, key, value)
         db.commit()
-        db.refresh(db_user)
-    return db_user
+        db.refresh(user)
+    return user
 
 def create_reset_token(db: Session, email: str):
     user = get_user_by_email(db, email=email)
@@ -53,7 +53,7 @@ def reset_password(db: Session, token: str, new_password: str):
     user = db.query(models.User).filter(models.User.reset_token == token).first()
     if user:
         user.hashed_password = get_password_hash(new_password)
-        user.reset_token = None
+        user.reset_token = None  # Invalidate the token after use
         db.commit()
         return user
     return None
