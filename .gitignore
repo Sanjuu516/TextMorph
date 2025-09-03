@@ -34,4 +34,4 @@ MANIFEST
 *.sqlite3
 
 # Secrets files
-.streamlit/secrets.toml
+frontend/.streamlit/secrets.toml
