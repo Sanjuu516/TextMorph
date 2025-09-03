@@ -35,3 +35,6 @@ MANIFEST
 
 # Secrets files
 frontend/.streamlit/secrets.toml
+
+#Backend
+backend/main.py
