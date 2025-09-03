@@ -1,0 +1,7 @@
+fastapi           # API framework
+uvicorn           # ASGI server to run FastAPI
+sqlalchemy        # ORM for SQLite
+pydantic          # Data validation & schemas
+transformers      # HuggingFace model (for summarization)
+torch             # backend engine for transformers (PyTorch)
+python-dotenv     # if you want to load environment variables
