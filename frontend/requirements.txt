@@ -1,7 +1,19 @@
-streamlit         # UI framework
-requests          # to call backend API
-hydralit_components==1.0.10
-numpy==1.26.4
-pandas==2.2.2
-pyarrow==16.1.0
-streamlit-option-menu
+# frontend/requirements.txt
+
+# Core Framework
+streamlit
+
+# API Communication
+requests
+
+# Dashboard: Readability Scores
+textstat
+
+# Dashboard: Charting
+plotly
+pandas
+
+# Dashboard: File Parsing
+pymupdf
+python-docx
+python-pptx
