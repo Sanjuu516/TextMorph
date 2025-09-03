@@ -37,4 +37,4 @@ MANIFEST
 frontend/.streamlit/secrets.toml
 
 #Backend
-backend/main.py
+backend/.env
