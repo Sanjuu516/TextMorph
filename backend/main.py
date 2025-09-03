@@ -14,8 +14,8 @@ from .database import SessionLocal, engine
 load_dotenv()
 
 # Securely get secrets from environment variables
-SENDER_EMAIL = os.getenv("sanjananarni516@gmail.com")
-SENDGRID_API_KEY = os.getenv("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")
+SENDER_EMAIL = os.getenv("SENDER_EMAIL")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 
 # This command creates the database tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
