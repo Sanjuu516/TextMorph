@@ -1,23 +1,30 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func, Text
 from .database import Base
 
-# Define the User model, which corresponds to the "users" table in the database.
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
+    full_name = Column(String)
+    hashed_password = Column(String, nullable=False)
+    reset_token = Column(String, nullable=True)
     
-    # User Profile Fields
-    full_name = Column(String, index=True, nullable=True)
+    # Optional profile fields
     age = Column(Integer, nullable=True)
-    bio = Column(String, nullable=True)
-    
-    # Text Project Specific Fields
-    summary_length = Column(String, default="Medium")
-    summary_style = Column(String, default="Paragraph")
+    bio = Column(Text, nullable=True)
+    language_preference = Column(String, nullable=True)
+    summary_length = Column(String, nullable=True)
+    summary_style = Column(String, nullable=True)
 
-    # Password Reset
-    reset_token = Column(String, unique=True, index=True, nullable=True)
+class History(Base):
+    __tablename__ = "history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_email = Column(String, ForeignKey("users.email"))
+    operation_type = Column(String, index=True)
+    original_text = Column(Text)
+    result_text = Column(Text)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+

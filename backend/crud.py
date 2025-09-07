@@ -57,3 +57,22 @@ def reset_password(db: Session, token: str, new_password: str):
         db.commit()
         return user
     return None
+
+# NEW: Added the missing function to create a history entry in the database
+def create_history_entry(db: Session, history: schemas.HistoryCreate):
+    db_history = models.History(
+        user_email=history.user_email,
+        operation_type=history.operation_type,
+        original_text=history.original_text,
+        result_text=history.result_text
+    )
+    db.add(db_history)
+    db.commit()
+    db.refresh(db_history)
+    return db_history
+
+def get_user_history(db: Session, email: str):
+    """
+    Retrieves all history entries for a user based on their email.
+    """
+    return db.query(models.History).filter(models.History.user_email == email).order_by(models.History.timestamp.desc()).all()

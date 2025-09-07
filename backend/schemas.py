@@ -41,27 +41,30 @@ class SummaryRequest(BaseModel):
     model_name: str
     length: str
 
+# CORRECTED: Consolidated into one class with all required fields
 class ParaphraseRequest(BaseModel):
     text: str
     model_name: str
     creativity: float
+    length: str
+    user_email: Optional[str] = None # Added to link history for logged-in users
 
 class SentimentRequest(BaseModel):
     text: str
 
 # --- Schemas for History ---
 class HistoryBase(BaseModel):
-    task_type: str
-    model_used: str
+    operation_type: str
     original_text: str
-    transformed_text: str
+    result_text: str
 
 class HistoryCreate(HistoryBase):
-    owner_email: str
+    user_email: str
 
 class History(HistoryBase):
     id: int
     timestamp: datetime.datetime
+    user_email: str
 
     class Config:
         from_attributes = True

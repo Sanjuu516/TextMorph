@@ -8,6 +8,8 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
 import nltk
+import textstat  # Ensure this import is present
+from nltk.tokenize import sent_tokenize
 
 from . import crud, models, schemas
 from .database import SessionLocal, engine
@@ -22,11 +24,15 @@ SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 
 # --- NLTK Download ---
+# Ensures all necessary resources for analysis are present
 try:
     nltk.data.find('sentiment/vader_lexicon.zip')
+    nltk.data.find('tokenizers/punkt')
 except LookupError:
-    print("Downloading NLTK VADER lexicon...")
+    print("Downloading NLTK resources (VADER lexicon and Punkt tokenizer)...")
     nltk.download('vader_lexicon')
+    nltk.download('punkt')
+
 
 # --- Model Caching ---
 summarization_pipelines = {}
@@ -55,6 +61,43 @@ def get_db():
     finally:
         db.close()
 
+def analyze_text_complexity(text: str):
+    """
+    Analyzes text complexity by classifying each sentence based on the
+    Flesch-Kincaid Grade Level.
+    """
+    sentences = sent_tokenize(text)
+    if not sentences:
+        return {"beginner": 0, "intermediate": 0, "advanced": 0}
+
+    beginner_count, intermediate_count, advanced_count = 0, 0, 0
+
+    for sentence in sentences:
+        # Skip very short sentences that can skew results
+        if len(sentence.split()) < 5:
+            continue
+        try:
+            grade_level = textstat.flesch_kincaid_grade(sentence)
+            if grade_level < 8:
+                beginner_count += 1
+            elif 8 <= grade_level <= 12:
+                intermediate_count += 1
+            else:
+                advanced_count += 1
+        except Exception:
+            continue
+
+    total_valid = beginner_count + intermediate_count + advanced_count
+    if total_valid == 0:
+        # If all sentences were too short, classify as beginner
+        return {"beginner": 100, "intermediate": 0, "advanced": 0}
+
+    return {
+        "beginner": round((beginner_count / total_valid) * 100),
+        "intermediate": round((intermediate_count / total_valid) * 100),
+        "advanced": round((advanced_count / total_valid) * 100),
+    }
+
 # --- User & Profile Endpoints ---
 @app.post("/users/", response_model=schemas.User)
 def create_user_endpoint(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -65,7 +108,6 @@ def create_user_endpoint(user: schemas.UserCreate, db: Session = Depends(get_db)
 
 @app.post("/token")
 def login_for_access_token(
-        # CORRECTED: Use the imported class directly
         form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
         db: Session = Depends(get_db)
     ):
@@ -117,6 +159,7 @@ def reset_password_endpoint(password_reset: schemas.PasswordReset, db: Session =
 # --- Advanced Text Tool Endpoints ---
 @app.post("/summarize/")
 def summarize_text(summary_request: schemas.SummaryRequest):
+    # This endpoint remains unchanged
     model_name = summary_request.model_name
     text = summary_request.text
     length = summary_request.length
@@ -140,11 +183,20 @@ def summarize_text(summary_request: schemas.SummaryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate summary: {e}")
 
+
 @app.post("/paraphrase/")
-def paraphrase_text(paraphrase_request: schemas.ParaphraseRequest):
+def paraphrase_text(paraphrase_request: schemas.ParaphraseRequest, db: Session = Depends(get_db)):
+    """
+    Paraphrases the given text and saves the result to history if a user email is provided.
+    Also analyzes the text complexity of the original and paraphrased versions.
+    """
     model_name = paraphrase_request.model_name
     text = paraphrase_request.text
     creativity = paraphrase_request.creativity
+    length = paraphrase_request.length
+    user_email = paraphrase_request.user_email
+
+    print("Backend received this request:", paraphrase_request)
 
     if model_name not in paraphrasing_pipelines:
         print(f"Loading paraphrasing model: {model_name}...")
@@ -157,17 +209,60 @@ def paraphrase_text(paraphrase_request: schemas.ParaphraseRequest):
     
     model, tokenizer = paraphrasing_pipelines[model_name]
     
+    original_word_count = len(text.split())
+    if length == "short":
+        min_len, max_len = int(original_word_count * 0.4), int(original_word_count * 0.7)
+    elif length == "long":
+        min_len, max_len = int(original_word_count * 1.1), int(original_word_count * 1.5)
+    else:
+        min_len, max_len = int(original_word_count * 0.8), int(original_word_count * 1.2)
+    
+    if min_len < 10: min_len = 10
+    if max_len <= min_len: max_len = min_len + 20
+
     temperature = 0.5 + creativity
     top_p = 0.85 + (creativity / 10)
 
     try:
         inputs = tokenizer.encode("paraphrase: " + text, return_tensors="pt", max_length=512, truncation=True)
         summary_ids = model.generate(
-            inputs, max_length=150, num_return_sequences=3, num_beams=5, temperature=temperature, top_p=top_p
+          inputs,
+          min_length=min_len,
+          max_length=max_len,
+          num_return_sequences=3,
+          do_sample=True,
+          temperature=temperature,
+          top_p=top_p
         )
         paraphrased_texts = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in summary_ids]
-        return {"paraphrased_options": paraphrased_texts}
+
+        if user_email:
+            print(f"Attempting to save history for user: {user_email}")
+            combined_results = "\n\n---\n\n".join(paraphrased_texts)
+            history_entry = schemas.HistoryCreate(
+                user_email=user_email,
+                operation_type="Paraphrase",
+                original_text=text,
+                result_text=combined_results
+            )
+            crud.create_history_entry(db=db, history=history_entry)
+
+        original_analysis = analyze_text_complexity(text)
+        paraphrased_results = []
+        for p_text in paraphrased_texts:
+            complexity_analysis = analyze_text_complexity(p_text)
+            paraphrased_results.append({
+                "text": p_text,
+                "complexity": complexity_analysis
+            })
+
+        return {
+            "original_text_analysis": original_analysis,
+            "paraphrased_results": paraphrased_results
+        }
+
     except Exception as e:
+        print(f"An error occurred during paraphrase generation: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate paraphrase: {e}")
 
 @app.post("/sentiment/")
