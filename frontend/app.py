@@ -49,15 +49,14 @@ with st.container(border=True):
                 except requests.exceptions.ConnectionError:
                     st.error("Could not connect to the backend.", icon="🔥")
 
-# --- Navigation buttons for non-logged-in users ---
 st.divider()
 col1, col2 = st.columns(2)
 with col1:
     if st.button("Create an Account", use_container_width=True):
-        st.switch_page("pages/Register.py") # Removed number
+        st.switch_page("pages/Register.py") 
 with col2:
     if st.button("Forgot Password?", use_container_width=True):
-        st.switch_page("pages/Forgot_Password.py") # Removed number
+        st.switch_page("pages/Forgot_Password.py") 
 
 st.markdown(
     """
