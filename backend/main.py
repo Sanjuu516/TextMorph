@@ -8,7 +8,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
 import nltk
-import textstat  # Ensure this import is present
+import textstat 
 from nltk.tokenize import sent_tokenize
 
 from . import crud, models, schemas
@@ -98,6 +98,35 @@ def analyze_text_complexity(text: str):
         "advanced": round((advanced_count / total_valid) * 100),
     }
 
+def analyze_text_complexity(text: str):
+    """Analyzes text complexity by classifying each sentence."""
+    sentences = sent_tokenize(text)
+    if not sentences:
+        return {"beginner": 0, "intermediate": 0, "advanced": 0}
+    
+    counts = {"beginner": 0, "intermediate": 0, "advanced": 0}
+    for sentence in sentences:
+        if len(sentence.split()) < 5: continue
+        try:
+            grade = textstat.flesch_kincaid_grade(sentence)
+            if grade < 8: counts["beginner"] += 1
+            elif 8 <= grade <= 12: counts["intermediate"] += 1
+            else: counts["advanced"] += 1
+        except Exception:
+            continue
+    
+    total = sum(counts.values())
+    if total == 0: return {"beginner": 100, "intermediate": 0, "advanced": 0}
+    
+    return {level: round((count / total) * 100) for level, count in counts.items()}
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 # --- User & Profile Endpoints ---
 @app.post("/users/", response_model=schemas.User)
 def create_user_endpoint(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -158,11 +187,11 @@ def reset_password_endpoint(password_reset: schemas.PasswordReset, db: Session =
 
 # --- Advanced Text Tool Endpoints ---
 @app.post("/summarize/")
-def summarize_text(summary_request: schemas.SummaryRequest):
-    # This endpoint remains unchanged
+def summarize_text(summary_request: schemas.SummaryRequest, db: Session = Depends(get_db)):
     model_name = summary_request.model_name
     text = summary_request.text
     length = summary_request.length
+    user_email = summary_request.user_email
 
     if model_name not in summarization_pipelines:
         print(f"Loading summarization model: {model_name}...")
@@ -173,16 +202,36 @@ def summarize_text(summary_request: schemas.SummaryRequest):
     
     summarizer = summarization_pipelines[model_name]
     
-    length_map = {"short": 50, "medium": 100, "long": 150}
-    max_len = length_map.get(length, 100)
-    min_len = int(max_len * 0.5)
+    length_map = {"short": 50, "medium": 150, "long": 300}
+    max_len = length_map.get(length, 150)
+    min_len = int(max_len * 0.3)
 
     try:
-        summary = summarizer(text, max_length=max_len, min_length=min_len, do_sample=False)
-        return {"summary": summary[0]['summary_text']}
+        summary_result = summarizer(text, max_length=max_len, min_length=min_len, do_sample=False)
+        summary_text = summary_result[0]['summary_text']
+
+        # Save to history if user is logged in
+        if user_email:
+            history_entry = schemas.HistoryCreate(
+                user_email=user_email,
+                operation_type="Summarize",
+                original_text=text,
+                result_text=summary_text
+            )
+            crud.create_history_entry(db=db, history=history_entry)
+
+        # Perform complexity analysis
+        original_analysis = analyze_text_complexity(text)
+        summary_analysis = analyze_text_complexity(summary_text)
+        
+        # Return the complete data structure
+        return {
+            "summary": summary_text,
+            "original_text_analysis": original_analysis,
+            "summary_text_analysis": summary_analysis
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate summary: {e}")
-
 
 @app.post("/paraphrase/")
 def paraphrase_text(paraphrase_request: schemas.ParaphraseRequest, db: Session = Depends(get_db)):

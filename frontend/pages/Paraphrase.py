@@ -14,7 +14,12 @@ st.set_page_config(
     page_icon="✍️",
     layout="wide",
 )
-
+# --- Authentication Check ---
+# Ensure the user is logged in to access this feature.
+if not st.session_state.get('logged_in', False):
+    st.error("You need to log in to view this page.")
+    st.warning("Please log in or create an account from the main page.")
+    st.stop()
 # --- Text Extraction Functions ---
 def extract_text_from_pdf(file_bytes):
     """Extracts text from a PDF file."""

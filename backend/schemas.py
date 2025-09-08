@@ -3,16 +3,17 @@ from typing import Optional, List
 import datetime
 
 # --- Schemas for User & Auth ---
-class UserCreate(BaseModel):
-    username: str
+class UserBase(BaseModel):
     email: str
-    password: str
-    full_name: str
 
-class User(BaseModel):
+class UserCreate(UserBase):
+    username: str
+    full_name: str
+    password: str
+
+class User(UserBase):
     id: int
     username: str
-    email: str
     full_name: str
     age: Optional[int] = None
     bio: Optional[str] = None
@@ -35,36 +36,39 @@ class PasswordReset(BaseModel):
     token: str
     new_password: str
 
-# --- Schemas for Text Tools ---    
+# --- Schemas for Text Tools ---
 class SummaryRequest(BaseModel):
     text: str
     model_name: str
     length: str
+    user_email: Optional[str] = None
 
-# CORRECTED: Consolidated into one class with all required fields
 class ParaphraseRequest(BaseModel):
     text: str
     model_name: str
     creativity: float
     length: str
-    user_email: Optional[str] = None # Added to link history for logged-in users
+    style: Optional[str] = None  # MODIFIED: Made the style field optional
+    user_email: Optional[str] = None
 
 class SentimentRequest(BaseModel):
     text: str
 
 # --- Schemas for History ---
-class HistoryBase(BaseModel):
+class HistoryCreate(BaseModel):
+    user_email: str
     operation_type: str
     original_text: str
     result_text: str
 
-class HistoryCreate(HistoryBase):
-    user_email: str
-
-class History(HistoryBase):
+class History(BaseModel):
     id: int
-    timestamp: datetime.datetime
     user_email: str
+    operation_type: str
+    original_text: str
+    result_text: str
+    timestamp: datetime.datetime
 
     class Config:
         from_attributes = True
+
