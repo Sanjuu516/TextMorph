@@ -1,7 +1,7 @@
 # TextMorph
 TextMorph Advanced Text Summarization and Paraphrasing 
 📖 Overview
-TextMorph is a full-stack web application designed to be a comprehensive writing assistant. It provides users with powerful tools to analyze and improve their text, featuring a secure authentication system, detailed user profiles, and an advanced AI-powered dashboard for readability analysis.
+TextMorph is a full-stack ml application designed to be a comprehensive writing assistant. It provides users with powerful tools to analyze and improve their text, featuring a secure authentication system, detailed user profiles, and an advanced AI-powered dashboard for readability analysis.
 
 The application is built with a modern, decoupled architecture, using Streamlit for a highly interactive Python-based frontend and FastAPI for a high-performance, asynchronous backend.
 
