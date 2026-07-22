@@ -212,19 +212,29 @@ def summarize_text(summary_request: schemas.SummaryRequest, db: Session = Depend
     if model_name not in summarization_pipelines:
         print(f"Loading summarization model: {model_name}...")
         try:
-            summarization_pipelines[model_name] = pipeline("summarization", model=model_name)
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+            summarization_pipelines[model_name] = (model, tokenizer)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to load model: {e}")
-    
-    summarizer = summarization_pipelines[model_name]
+            try:
+                summarization_pipelines[model_name] = pipeline("text2text-generation", model=model_name)
+            except Exception as ex:
+                raise HTTPException(status_code=500, detail=f"Failed to load model: {ex}")
     
     length_map = {"short": 50, "medium": 150, "long": 300}
     max_len = length_map.get(length, 150)
     min_len = int(max_len * 0.3)
 
     try:
-        summary_result = summarizer(text, max_length=max_len, min_length=min_len, do_sample=False)
-        summary_text = summary_result[0]['summary_text']
+        model_obj = summarization_pipelines[model_name]
+        if isinstance(model_obj, tuple):
+            model, tokenizer = model_obj
+            inputs = tokenizer.encode("summarize: " + text, return_tensors="pt", max_length=512, truncation=True)
+            summary_ids = model.generate(inputs, max_length=max_len, min_length=min_len, do_sample=False)
+            summary_text = tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        else:
+            summary_result = model_obj(text, max_length=max_len, min_length=min_len, do_sample=False)
+            summary_text = summary_result[0].get('summary_text') or summary_result[0].get('generated_text', '')
 
         if user_email:
             history_entry = schemas.HistoryCreate(
