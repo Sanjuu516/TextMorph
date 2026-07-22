@@ -1,6 +1,8 @@
 import os
+import re
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import Annotated, List
@@ -17,14 +19,27 @@ from .database import SessionLocal, engine
 # Load environment variables and create DB tables
 load_dotenv()
 models.Base.metadata.create_all(bind=engine)
-app = FastAPI()
+
+app = FastAPI(
+    title="TextMorph API",
+    description="Backend microservice for TextMorph AI text paraphrasing, summarization, and user intelligence.",
+    version="1.0.0"
+)
+
+# Enable CORS for cross-origin deployments
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Securely get secrets from environment variables
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 
 # --- NLTK Download ---
-# Ensures all necessary resources for analysis are present
 try:
     nltk.data.find('sentiment/vader_lexicon.zip')
     nltk.data.find('tokenizers/punkt')
@@ -33,14 +48,28 @@ except LookupError:
     nltk.download('vader_lexicon')
     nltk.download('punkt')
 
-
 # --- Model Caching ---
 summarization_pipelines = {}
 paraphrasing_pipelines = {}
 sentiment_pipeline = None
 
 # --- Helper Functions ---
+def is_valid_email(email: str) -> bool:
+    if not email or not isinstance(email, str):
+        return False
+    email = email.strip()
+    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    if not re.match(pattern, email):
+        return False
+    domain = email.split('@')[-1].lower()
+    if domain in ['test.com', 'example.com', 'fake.com', 'xyz.com', 'abc.com', 'test']:
+        return False
+    return True
+
 def send_password_reset_email(recipient_email: str, reset_link: str):
+    if not SENDER_EMAIL or not SENDGRID_API_KEY:
+        print("SendGrid credentials not set; skipping email dispatch.")
+        return
     message = Mail(
         from_email=SENDER_EMAIL,
         to_emails=recipient_email,
@@ -62,74 +91,38 @@ def get_db():
         db.close()
 
 def analyze_text_complexity(text: str):
-    """
-    Analyzes text complexity by classifying each sentence based on the
-    Flesch-Kincaid Grade Level.
-    """
-    sentences = sent_tokenize(text)
-    if not sentences:
-        return {"beginner": 0, "intermediate": 0, "advanced": 0}
-
-    beginner_count, intermediate_count, advanced_count = 0, 0, 0
-
-    for sentence in sentences:
-        # Skip very short sentences that can skew results
-        if len(sentence.split()) < 5:
-            continue
-        try:
-            grade_level = textstat.flesch_kincaid_grade(sentence)
-            if grade_level < 8:
-                beginner_count += 1
-            elif 8 <= grade_level <= 12:
-                intermediate_count += 1
-            else:
-                advanced_count += 1
-        except Exception:
-            continue
-
-    total_valid = beginner_count + intermediate_count + advanced_count
-    if total_valid == 0:
-        # If all sentences were too short, classify as beginner
-        return {"beginner": 100, "intermediate": 0, "advanced": 0}
-
-    return {
-        "beginner": round((beginner_count / total_valid) * 100),
-        "intermediate": round((intermediate_count / total_valid) * 100),
-        "advanced": round((advanced_count / total_valid) * 100),
-    }
-
-def analyze_text_complexity(text: str):
-    """Analyzes text complexity by classifying each sentence."""
+    """Analyzes text complexity by classifying each sentence based on Flesch-Kincaid Grade."""
     sentences = sent_tokenize(text)
     if not sentences:
         return {"beginner": 0, "intermediate": 0, "advanced": 0}
     
     counts = {"beginner": 0, "intermediate": 0, "advanced": 0}
     for sentence in sentences:
-        if len(sentence.split()) < 5: continue
+        if len(sentence.split()) < 5:
+            continue
         try:
             grade = textstat.flesch_kincaid_grade(sentence)
-            if grade < 8: counts["beginner"] += 1
-            elif 8 <= grade <= 12: counts["intermediate"] += 1
-            else: counts["advanced"] += 1
+            if grade < 8:
+                counts["beginner"] += 1
+            elif 8 <= grade <= 12:
+                counts["intermediate"] += 1
+            else:
+                counts["advanced"] += 1
         except Exception:
             continue
     
     total = sum(counts.values())
-    if total == 0: return {"beginner": 100, "intermediate": 0, "advanced": 0}
+    if total == 0:
+        return {"beginner": 100, "intermediate": 0, "advanced": 0}
     
     return {level: round((count / total) * 100) for level, count in counts.items()}
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # --- User & Profile Endpoints ---
 @app.post("/users/", response_model=schemas.User)
 def create_user_endpoint(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    if not is_valid_email(user.email):
+        raise HTTPException(status_code=400, detail="Please enter a valid, authentic email address (e.g., user@gmail.com)")
+    
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -137,18 +130,25 @@ def create_user_endpoint(user: schemas.UserCreate, db: Session = Depends(get_db)
 
 @app.post("/token")
 def login_for_access_token(
-        form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-        db: Session = Depends(get_db)
-    ):
-        user = crud.get_user_by_email(db, email=form_data.username)
-        if not user or not crud.verify_password(form_data.password, user.hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        return {"access_token": user.username, "token_type": "bearer"}
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Session = Depends(get_db)
+):
+    email = form_data.username.strip() if form_data.username else ""
+    if not is_valid_email(email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please enter a valid, authentic email address (e.g., user@gmail.com)",
+        )
     
+    user = crud.get_user_by_email(db, email=email)
+    if not user or not crud.verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return {"access_token": user.username, "token_type": "bearer"}
+
 @app.get("/profile/{email}", response_model=schemas.User)
 def get_user_profile(email: str, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=email)
@@ -165,6 +165,9 @@ def update_user_profile(email: str, profile: schemas.ProfileUpdate, db: Session 
 
 @app.post("/password-recovery/{email}")
 def recover_password(email: str, db: Session = Depends(get_db)):
+    if not is_valid_email(email):
+        raise HTTPException(status_code=400, detail="Please enter a valid, authentic email address")
+    
     token = crud.create_reset_token(db, email=email)
     if not token:
         raise HTTPException(
@@ -210,7 +213,6 @@ def summarize_text(summary_request: schemas.SummaryRequest, db: Session = Depend
         summary_result = summarizer(text, max_length=max_len, min_length=min_len, do_sample=False)
         summary_text = summary_result[0]['summary_text']
 
-        # Save to history if user is logged in
         if user_email:
             history_entry = schemas.HistoryCreate(
                 user_email=user_email,
@@ -220,11 +222,9 @@ def summarize_text(summary_request: schemas.SummaryRequest, db: Session = Depend
             )
             crud.create_history_entry(db=db, history=history_entry)
 
-        # Perform complexity analysis
         original_analysis = analyze_text_complexity(text)
         summary_analysis = analyze_text_complexity(summary_text)
         
-        # Return the complete data structure
         return {
             "summary": summary_text,
             "original_text_analysis": original_analysis,
@@ -235,17 +235,11 @@ def summarize_text(summary_request: schemas.SummaryRequest, db: Session = Depend
 
 @app.post("/paraphrase/")
 def paraphrase_text(paraphrase_request: schemas.ParaphraseRequest, db: Session = Depends(get_db)):
-    """
-    Paraphrases the given text and saves the result to history if a user email is provided.
-    Also analyzes the text complexity of the original and paraphrased versions.
-    """
     model_name = paraphrase_request.model_name
     text = paraphrase_request.text
     creativity = paraphrase_request.creativity
     length = paraphrase_request.length
     user_email = paraphrase_request.user_email
-
-    print("Backend received this request:", paraphrase_request)
 
     if model_name not in paraphrasing_pipelines:
         print(f"Loading paraphrasing model: {model_name}...")
@@ -275,18 +269,17 @@ def paraphrase_text(paraphrase_request: schemas.ParaphraseRequest, db: Session =
     try:
         inputs = tokenizer.encode("paraphrase: " + text, return_tensors="pt", max_length=512, truncation=True)
         summary_ids = model.generate(
-          inputs,
-          min_length=min_len,
-          max_length=max_len,
-          num_return_sequences=3,
-          do_sample=True,
-          temperature=temperature,
-          top_p=top_p
+            inputs,
+            min_length=min_len,
+            max_length=max_len,
+            num_return_sequences=3,
+            do_sample=True,
+            temperature=temperature,
+            top_p=top_p
         )
         paraphrased_texts = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in summary_ids]
 
         if user_email:
-            print(f"Attempting to save history for user: {user_email}")
             combined_results = "\n\n---\n\n".join(paraphrased_texts)
             history_entry = schemas.HistoryCreate(
                 user_email=user_email,
@@ -311,7 +304,6 @@ def paraphrase_text(paraphrase_request: schemas.ParaphraseRequest, db: Session =
         }
 
     except Exception as e:
-        print(f"An error occurred during paraphrase generation: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate paraphrase: {e}")
 
 @app.post("/sentiment/")
@@ -320,7 +312,6 @@ def analyze_sentiment(sentiment_request: schemas.SentimentRequest):
     text = sentiment_request.text
     
     if sentiment_pipeline is None:
-        print("Loading sentiment analysis model...")
         try:
             sentiment_pipeline = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment")
         except Exception as e:
@@ -344,4 +335,3 @@ def save_history_entry(history: schemas.HistoryCreate, db: Session = Depends(get
 def read_user_history(email: str, db: Session = Depends(get_db)):
     history = crud.get_user_history(db, email=email)
     return history
-

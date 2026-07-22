@@ -1,6 +1,11 @@
 import streamlit as st
 import requests
 import pandas as pd
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from utils import get_backend_url
 
 # --- Check Login Status ---
 if not st.session_state.get('logged_in', False):
@@ -8,32 +13,28 @@ if not st.session_state.get('logged_in', False):
     st.stop()
 
 st.title("📖 Your Transformation History")
-st.markdown("Here is a record of your recent paraphrasing activities.")
+st.markdown("Here is a record of your recent paraphrasing and summarization activities.")
 
 # --- Fetch History Data ---
-# Cache data for 60 seconds to avoid re-fetching on every interaction
-@st.cache_data(ttl=60)
 def fetch_history(email):
     """Fetches user history from the backend API."""
-    backend_url = f"http://127.0.0.1:8000/history/{email}"
+    backend_url = f"{get_backend_url()}/history/{email}"
     try:
-        response = requests.get(backend_url)
+        response = requests.get(backend_url, timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
             st.error(f"Could not fetch your history (Error: {response.status_code}).")
             return []
     except requests.exceptions.ConnectionError:
-        st.error("Could not connect to the backend. Is it running?")
+        st.error("Could not connect to the backend server.")
         return []
 
-# Fetch data using the logged-in user's email from the session state
 history_data = fetch_history(st.session_state.user_email)
 
 if not history_data:
-    st.info("You don't have any saved history yet. Use the paraphraser to get started!")
+    st.info("You don't have any saved history yet. Use the paraphraser or summarizer to get started!")
 else:
-    # Display each history entry in an expander, showing the most recent items first
     for entry in reversed(history_data):
         timestamp = pd.to_datetime(entry['timestamp']).strftime('%B %d, %Y at %I:%M %p')
 
@@ -57,4 +58,3 @@ else:
                     disabled=True,
                     key=f"trans_{entry['id']}"
                 )
-

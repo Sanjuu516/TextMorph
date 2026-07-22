@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from utils import get_backend_url
 import streamlit as st
 import requests
 import docx
@@ -135,7 +139,7 @@ with col_settings:
     if st.button("Generate Summary", use_container_width=True, type="primary"):
         if original_text and original_text.strip():
             with st.spinner("The AI is condensing the text... Please wait."):
-                summarize_url = "http://127.0.0.1:8000/summarize/"
+                summarize_url = f"{get_backend_url()}/summarize/"
                 summarize_payload = {
                     "text": original_text,
                     "model_name": model_options[selected_model_name],

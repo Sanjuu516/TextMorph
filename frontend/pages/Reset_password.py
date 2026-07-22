@@ -1,30 +1,37 @@
 import streamlit as st
 import requests
 import time
+import sys
+import os
 
-st.title("Reset Your Password")
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from utils import get_backend_url
+
+st.title("Reset Your Password 🔒")
 
 if 'token' not in st.query_params:
-    st.error("No reset token found. Please use the link from your email.")
+    st.error("No reset token found. Please use the reset link sent to your email.")
     st.stop()
 
 token = st.query_params['token']
 st.markdown("Enter your new password below.")
 with st.form(key='reset_password_form'):
-    new_password = st.text_input("New Password", type="password")
-    confirm_password = st.text_input("Confirm New Password", type="password")
+    new_password = st.text_input("New Password (min 6 chars)", type="password", placeholder="••••••••")
+    confirm_password = st.text_input("Confirm New Password", type="password", placeholder="••••••••")
     submit_button = st.form_submit_button("Reset Password", use_container_width=True)
 
     if submit_button:
         if not all([new_password, confirm_password]):
-            st.error("Please fill out both password fields.")
+            st.error("Please fill out both password fields.", icon="⚠️")
+        elif len(new_password) < 6:
+            st.error("Password must be at least 6 characters long.", icon="⚠️")
         elif new_password != confirm_password:
             st.error("Passwords do not match.", icon="❌")
         else:
-            backend_url = "http://127.0.0.1:8000/reset-password/"
+            backend_url = f"{get_backend_url()}/reset-password/"
             payload = {"token": token, "new_password": new_password}
             try:
-                response = requests.post(backend_url, json=payload)
+                response = requests.post(backend_url, json=payload, timeout=10)
                 if response.status_code == 200:
                     st.success("Password reset successfully! Redirecting to login...", icon="✅")
                     time.sleep(2)
@@ -33,7 +40,7 @@ with st.form(key='reset_password_form'):
                     except Exception:
                         st.rerun()
                 else:
-                    st.error(f"Error: {response.json().get('detail')}", icon="🚨")
+                    detail = response.json().get('detail', 'Failed to reset password.')
+                    st.error(f"Error: {detail}", icon="🚨")
             except requests.exceptions.ConnectionError:
-                st.error("Could not connect to the backend.", icon="🔥")
-
+                st.error("Could not connect to the backend server.", icon="🔥")

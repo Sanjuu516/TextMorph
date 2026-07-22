@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from utils import get_backend_url
 import streamlit as st
 import requests
 import nltk
@@ -124,7 +128,7 @@ st.subheader("3. Generate & Analyze")
 if st.button("Run", use_container_width=True, type="primary"):
     if original_text:
         with st.spinner("The AI is working its magic... This might take a moment."):
-            paraphrase_url = "http://127.0.0.1:8000/paraphrase/"
+            paraphrase_url = f"{get_backend_url()}/paraphrase/"
 
             paraphrase_payload = {
                 "text": original_text,
@@ -145,7 +149,7 @@ if st.button("Run", use_container_width=True, type="primary"):
                     st.session_state.response_data = None
 
             except requests.exceptions.ConnectionError:
-                st.error("Could not connect to the backend at http://127.0.0.1:8000/. Is it running?")
+                st.error("Could not connect to the backend . Is it running?")
                 st.session_state.response_data = None
     else:
         st.warning("Please enter some text or upload a file to process.")

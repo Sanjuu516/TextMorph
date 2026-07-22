@@ -1,5 +1,10 @@
 import streamlit as st
 import requests
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from utils import get_backend_url
 
 # --- Check Login Status ---
 if not st.session_state.get('logged_in', False):
@@ -9,9 +14,9 @@ if not st.session_state.get('logged_in', False):
 # --- Helper Function to Fetch Profile ---
 def fetch_profile_data():
     email = st.session_state.user_email
-    backend_url = f"http://127.0.0.1:8000/profile/{email}"
+    backend_url = f"{get_backend_url()}/profile/{email}"
     try:
-        response = requests.get(backend_url)
+        response = requests.get(backend_url, timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
@@ -70,9 +75,9 @@ else:
                 "summary_length": summary_len,
                 "summary_style": summary_style,
             }
-            update_url = f"http://127.0.0.1:8000/profile/{st.session_state.user_email}"
+            update_url = f"{get_backend_url()}/profile/{st.session_state.user_email}"
             try:
-                response = requests.put(update_url, json=update_payload)
+                response = requests.put(update_url, json=update_payload, timeout=10)
                 if response.status_code == 200:
                     st.success("Profile updated successfully!")
                 else:
@@ -86,5 +91,7 @@ else:
         st.session_state.logged_in = False
         st.session_state.user_email = ""
         st.success("You have been logged out.")
-        st.switch_page("app.py")
-
+        try:
+            st.switch_page("app.py")
+        except Exception:
+            st.rerun()
