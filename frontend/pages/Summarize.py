@@ -50,9 +50,6 @@ def extract_text_from_pdf(file_bytes):
         except Exception:
             pass
     return ""
-    except Exception as e:
-        st.error(f"Error reading PDF file: {e}")
-        return ""
 
 def extract_text_from_docx(file_bytes):
     """Extracts text from a DOCX file."""

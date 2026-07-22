@@ -4,9 +4,14 @@ sqlalchemy        # ORM for SQLite
 pydantic          # Data validation & schemas
 passlib[bcrypt]   # Password hashing
 bcrypt==3.2.2     # Compatible bcrypt engine for passlib
-transformers      # HuggingFace model (for summarization)
-torch             # backend engine for transformers (PyTorch)
-python-dotenv     # load environment variables
+transformers      # HuggingFace model (for summarization & paraphrasing)
+torch             # Backend tensor engine
+python-dotenv     # Load environment variables
 sendgrid          # SendGrid email client
 textstat          # Readability scoring
 nltk              # Natural language toolkit
+tiktoken          # Required for HuggingFace tokenizers
+sentencepiece     # Required for T5 & Pegasus tokenizers
+protobuf          # Required for model protocol buffers
+rouge-score       # ROUGE metrics
+pyphen            # Syllable tokenizer
