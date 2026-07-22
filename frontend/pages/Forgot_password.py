@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from utils import get_backend_url, validate_email
 
 st.title("Forgot Your Password? 🔑")
-st.markdown("Enter your registered email address and we will send you a password recovery link.")
+st.markdown("Enter your registered email address below to receive a secure password recovery link.")
 
 with st.container(border=True):
     with st.form(key='forgot_password_form'):
@@ -25,16 +25,23 @@ with st.container(border=True):
                 try:
                     response = requests.post(backend_url, timeout=10)
                     if response.status_code == 200:
-                        st.success("Recovery email sent! Please check your inbox.", icon="✅")
+                        res_data = response.json()
+                        st.success("Password recovery link generated successfully! Check your inbox.", icon="✅")
+                        
+                        reset_link = res_data.get("reset_link")
+                        if reset_link:
+                            st.info("💡 **Instant Reset Link (Local Preview & Verification)**")
+                            st.link_button("🔑 Click Here to Reset Your Password Now", reset_link, use_container_width=True)
                     else:
                         try:
                             detail = response.json().get('detail', 'An unknown error occurred.')
                             st.error(f"Error: {detail}", icon="🚨")
                         except Exception:
-                            st.error("An unexpected error occurred. Please try again.", icon="🔥")
+                            st.error("An unexpected error occurred. Please verify your email.", icon="🔥")
                 except requests.exceptions.ConnectionError:
                     st.error("Could not connect to the backend server.", icon="🔥")
 
+st.divider()
 if st.button("← Back to Login"):
     try:
         st.switch_page("app.py")

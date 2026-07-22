@@ -67,9 +67,15 @@ def is_valid_email(email: str) -> bool:
     return True
 
 def send_password_reset_email(recipient_email: str, reset_link: str):
+    print(f"\n==========================================")
+    print(f"PASSWORD RESET LINK DISPATCHED TO {recipient_email}:")
+    print(f"{reset_link}")
+    print(f"==========================================\n")
+    
     if not SENDER_EMAIL or not SENDGRID_API_KEY:
-        print("SendGrid credentials not set; skipping email dispatch.")
+        print("SendGrid API key not set; reset link logged to console output above.")
         return
+    
     message = Mail(
         from_email=SENDER_EMAIL,
         to_emails=recipient_email,
@@ -174,9 +180,16 @@ def recover_password(email: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User with this email does not exist.",
         )
-    reset_link = f"http://localhost:8501/?page=reset_password&token={token}"
+    
+    frontend_base = os.getenv("FRONTEND_URL", "http://localhost:8501").rstrip("/")
+    reset_link = f"{frontend_base}/Reset_Password?token={token}"
     send_password_reset_email(recipient_email=email, reset_link=reset_link)
-    return {"message": "Password recovery email has been sent."}
+    
+    return {
+        "message": "Password recovery email sent successfully.",
+        "reset_link": reset_link,
+        "token": token
+    }
 
 @app.post("/reset-password/", response_model=schemas.User)
 def reset_password_endpoint(password_reset: schemas.PasswordReset, db: Session = Depends(get_db)):

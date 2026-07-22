@@ -9,11 +9,23 @@ from utils import get_backend_url
 
 st.title("Reset Your Password 🔒")
 
-if 'token' not in st.query_params:
-    st.error("No reset token found. Please use the reset link sent to your email.")
-    st.stop()
+# Retrieve token from query params or manual entry
+token = ""
+if hasattr(st, "query_params") and 'token' in st.query_params:
+    token = st.query_params['token']
 
-token = st.query_params['token']
+if not token:
+    st.info("No password reset token was detected in the URL query parameters.")
+    token = st.text_input("Enter Reset Token", placeholder="Paste token here")
+    if not token:
+        st.warning("Please provide a valid password reset token or request a new recovery link.")
+        if st.button("← Back to Forgot Password"):
+            try:
+                st.switch_page("pages/Forgot_Password.py")
+            except Exception:
+                st.rerun()
+        st.stop()
+
 st.markdown("Enter your new password below.")
 with st.form(key='reset_password_form'):
     new_password = st.text_input("New Password (min 6 chars)", type="password", placeholder="••••••••")
@@ -34,7 +46,7 @@ with st.form(key='reset_password_form'):
                 response = requests.post(backend_url, json=payload, timeout=10)
                 if response.status_code == 200:
                     st.success("Password reset successfully! Redirecting to login...", icon="✅")
-                    time.sleep(2)
+                    time.sleep(1.5)
                     try:
                         st.switch_page("app.py")
                     except Exception:
@@ -44,3 +56,9 @@ with st.form(key='reset_password_form'):
                     st.error(f"Error: {detail}", icon="🚨")
             except requests.exceptions.ConnectionError:
                 st.error("Could not connect to the backend server.", icon="🔥")
+
+if st.button("← Back to Login"):
+    try:
+        st.switch_page("app.py")
+    except Exception:
+        st.rerun()
