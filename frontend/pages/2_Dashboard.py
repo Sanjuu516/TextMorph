@@ -20,11 +20,16 @@ def get_ai_analysis(text):
     Calls the Gemini API to get a qualitative analysis of the provided text.
     Handles potential errors like missing API keys or network issues.
     """
+    api_key = None
     try:
-        # Securely fetch the API key from Streamlit's secrets management
-        api_key = st.secrets["GEMINI_API_KEY"]
-    except FileNotFoundError:
-        st.error("Please add your Gemini API key to .streamlit/secrets.toml")
+        if "GEMINI_API_KEY" in st.secrets:
+            api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        pass
+    if not api_key:
+        api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        st.error("Please add your GEMINI_API_KEY in Streamlit Secrets or environment variables.", icon="⚠️")
         return None, None
 
     # Define the specific API endpoint URL

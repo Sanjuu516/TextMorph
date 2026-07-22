@@ -9,9 +9,13 @@ DB_FILE = "users.json"
 def get_backend_url() -> str:
     """
     Returns the backend API URL dynamically based on secrets, environment variables, or default local server.
+    Safely handles StreamlitSecretNotFoundError when no secrets.toml file exists.
     """
-    if hasattr(st, "secrets") and "BACKEND_URL" in st.secrets:
-        return st.secrets["BACKEND_URL"].rstrip("/")
+    try:
+        if "BACKEND_URL" in st.secrets:
+            return str(st.secrets["BACKEND_URL"]).rstrip("/")
+    except Exception:
+        pass
     return os.getenv("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
 
 def validate_email(email: str) -> bool:
