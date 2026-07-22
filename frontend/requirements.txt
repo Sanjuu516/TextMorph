@@ -6,8 +6,9 @@ streamlit
 # API Communication
 requests
 
-# Dashboard: Readability Scores
+# Dashboard: Readability Scores & Metrics
 textstat
+rouge-score
 
 # Dashboard: Charting
 plotly
@@ -15,5 +16,6 @@ pandas
 
 # Dashboard: File Parsing
 pymupdf
+pypdf2
 python-docx
 python-pptx

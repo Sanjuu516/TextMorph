@@ -5,7 +5,16 @@ from utils import get_backend_url
 import streamlit as st
 import requests
 import docx
-import PyPDF2
+try:
+    import PyPDF2
+except ImportError:
+    PyPDF2 = None
+
+try:
+    import fitz
+except ImportError:
+    fitz = None
+
 import re
 from io import BytesIO, StringIO
 import pandas as pd
@@ -20,7 +29,6 @@ st.set_page_config(
 )
 
 # --- Authentication Check ---
-# Ensure the user is logged in to access this feature.
 if not st.session_state.get('logged_in', False):
     st.error("You need to log in to view this page.")
     st.warning("Please log in or create an account from the main page.")
@@ -28,11 +36,20 @@ if not st.session_state.get('logged_in', False):
 
 # --- Helper Functions ---
 def extract_text_from_pdf(file_bytes):
-    """Extracts text from a PDF file."""
-    try:
-        pdf_reader = PyPDF2.PdfReader(BytesIO(file_bytes))
-        text = "".join(page.extract_text() or "" for page in pdf_reader.pages)
-        return text
+    """Extracts text from a PDF file with dual engine support."""
+    if PyPDF2:
+        try:
+            pdf_reader = PyPDF2.PdfReader(BytesIO(file_bytes))
+            return "".join(page.extract_text() or "" for page in pdf_reader.pages)
+        except Exception:
+            pass
+    if fitz:
+        try:
+            with fitz.open(stream=file_bytes, filetype="pdf") as doc:
+                return "".join(page.get_text() for page in doc)
+        except Exception:
+            pass
+    return ""
     except Exception as e:
         st.error(f"Error reading PDF file: {e}")
         return ""

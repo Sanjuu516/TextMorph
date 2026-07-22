@@ -5,11 +5,24 @@ from utils import get_backend_url
 import streamlit as st
 import requests
 import nltk
-from rouge_score import rouge_scorer
+try:
+    from rouge_score import rouge_scorer
+except ImportError:
+    rouge_scorer = None
+
 import plotly.express as px
 import pandas as pd
 import docx
-import PyPDF2
+try:
+    import PyPDF2
+except ImportError:
+    PyPDF2 = None
+
+try:
+    import fitz
+except ImportError:
+    fitz = None
+
 from io import BytesIO, StringIO
 
 # --- Page Configuration ---
@@ -19,21 +32,26 @@ st.set_page_config(
     layout="wide",
 )
 # --- Authentication Check ---
-# Ensure the user is logged in to access this feature.
 if not st.session_state.get('logged_in', False):
     st.error("You need to log in to view this page.")
     st.warning("Please log in or create an account from the main page.")
     st.stop()
 # --- Text Extraction Functions ---
 def extract_text_from_pdf(file_bytes):
-    """Extracts text from a PDF file."""
-    try:
-        pdf_reader = PyPDF2.PdfReader(BytesIO(file_bytes))
-        text = "".join(page.extract_text() or "" for page in pdf_reader.pages)
-        return text
-    except Exception as e:
-        st.error(f"Error reading PDF file: {e}")
-        return ""
+    """Extracts text from a PDF file with dual engine support."""
+    if PyPDF2:
+        try:
+            pdf_reader = PyPDF2.PdfReader(BytesIO(file_bytes))
+            return "".join(page.extract_text() or "" for page in pdf_reader.pages)
+        except Exception:
+            pass
+    if fitz:
+        try:
+            with fitz.open(stream=file_bytes, filetype="pdf") as doc:
+                return "".join(page.get_text() for page in doc)
+        except Exception:
+            pass
+    return ""
 
 def extract_text_from_docx(file_bytes):
     """Extracts text from a DOCX file."""
@@ -208,17 +226,18 @@ if 'response_data' in st.session_state and st.session_state.response_data:
                     fig_line.update_layout(title_x=0.5)
                     st.plotly_chart(fig_line, use_container_width=True)
 
-        st.subheader("Semantic Similarity (ROUGE Scores)")
-        scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-        scores_data = []
-        for i, result in enumerate(paraphrased_results, 1):
-            scores = scorer.score(original_text, result['text'])
-            scores_data.append({
-                'Option': f'Option {i}',
-                'ROUGE-1': scores['rouge1'].fmeasure,
-                'ROUGE-2': scores['rouge2'].fmeasure,
-                'ROUGE-L': scores['rougeL'].fmeasure,
-            })
+        if rouge_scorer:
+            st.subheader("Semantic Similarity (ROUGE Scores)")
+            scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+            scores_data = []
+            for i, result in enumerate(paraphrased_results, 1):
+                scores = scorer.score(original_text, result['text'])
+                scores_data.append({
+                    'Option': f'Option {i}',
+                    'ROUGE-1': scores['rouge1'].fmeasure,
+                    'ROUGE-2': scores['rouge2'].fmeasure,
+                    'ROUGE-L': scores['rougeL'].fmeasure,
+                })
 
         if scores_data:
             df_scores = pd.DataFrame(scores_data)
